@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MathMaster AI - Navy Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              serif: ['Playfair Display', 'serif'],
+            },
+            colors: {
+              // User Palette Mapping
+              // #192C5D (Navy) -> Text / Dark Primary
+              // #1C4FA3 (Royal Blue) -> Primary Brand / Action
+              // #C02625 (Red) -> Danger / Important
+              // #D8E3EC (Mist Blue) -> Backgrounds / Borders
+              // #6DADCD (Cyan) -> Secondary Accent / Highlights
+              
+              paris: {
+                50: '#F5F9FC', 
+                100: '#EBF3FA', 
+                200: '#D6E4F5',
+                300: '#1C4FA3', // Royal Blue (Primary Button)
+                400: '#163E82', // Hover
+                500: '#1C4FA3', // Text Highlights
+                600: '#133570', 
+                700: '#192C5D', // Navy
+                800: '#192C5D', // Navy (Text)
+                900: '#192C5D', // Navy (Headers)
+              },
+              // Re-mapping "Peach" key to the Cyan accent for highlights
+              peach: {
+                100: '#EEF9FC', // Light Cyan Bg
+                200: '#D3EFF7',
+                300: '#A1DCF0',
+                400: '#6DADCD', // User Cyan
+                500: '#5BAEC2',
+                600: '#4A92A3',
+              },
+              mist: {
+                50: '#F8FBFC', // App Bg
+                100: '#E8F1F8',
+                200: '#D8E3EC', // User Mist (Borders/Panels)
+                300: '#C5D6E6',
+                400: '#B2C9E0', 
+                500: '#9FBCCF',
+              },
+              rose: {
+                50: '#FDF2F2',
+                100: '#FAE1E1',
+                200: '#F5C4C4',
+                300: '#EFAAAA',
+                400: '#C02625', // User Red
+                500: '#C02625',
+                600: '#A1201F',
+              }
+            },
+            typography: (theme) => ({
+              DEFAULT: {
+                css: {
+                  color: theme('colors.paris.800'), // Navy Text
+                  strong: { color: theme('colors.paris.900') }, // Navy Bold
+                  h1: { color: theme('colors.paris.900'), fontFamily: 'Playfair Display, serif' },
+                  h2: { color: theme('colors.paris.800'), fontFamily: 'Playfair Display, serif' },
+                  h3: { color: theme('colors.paris.500') }, // Royal Blue
+                  blockquote: { 
+                    color: theme('colors.paris.700'),
+                    borderLeftColor: theme('colors.peach.400'), // Cyan Border
+                    backgroundColor: theme('colors.peach.100'), // Light Cyan Bg
+                    fontStyle: 'italic',
+                  },
+                  code: { 
+                    color: theme('colors.rose.500'),
+                    backgroundColor: theme('colors.mist.100'),
+                    padding: '0.2em 0.4em',
+                    borderRadius: '0.25rem',
+                  },
+                },
+              },
+            }),
+          },
+        },
+      }
+    </script>
+    <!-- MathJax for rendering LaTeX in the AI responses -->
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['$$', '$$'], ['\\[', '\\]']],
+          processEscapes: true
+        },
+        svg: {
+          fontCache: 'global'
+        },
+        startup: {
+          typeset: false // We will trigger manually in React
+        }
+      };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0"
+  }
+}
+</script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+</head>
+  <body class="bg-mist-50 text-slate-800 font-sans antialiased h-screen overflow-hidden">
+    <div id="root"></div>
+  </body>
+</html>

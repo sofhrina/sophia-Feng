@@ -1,0 +1,7 @@
+{
+  "name": "MathMaster AI",
+  "description": "A comprehensive university mathematics review tool featuring AI-powered definition expansion, theorem proof analysis from photos, and step-by-step exercise generation.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
