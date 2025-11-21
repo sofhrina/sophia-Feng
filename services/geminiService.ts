@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { ProblemStep } from "../types";
 
@@ -191,29 +192,48 @@ export const generateAiProblem = async (subject: string, chapter: string, specif
   }
 };
 
-export const solveUserProblem = async (problemText: string): Promise<{ steps: ProblemStep[], knowledgePoints: string[], summary: string }> => {
+export const solveUserProblem = async (problemText: string, images?: string[]): Promise<{ steps: ProblemStep[], knowledgePoints: string[], summary: string, problem_transcription?: string }> => {
   try {
+    const parts = [];
+    
+    // Add images if present
+    if (images && images.length > 0) {
+        images.forEach(img => {
+            const base64Data = img.replace(/^data:image\/\w+;base64,/, "");
+            parts.push({ inlineData: { mimeType: "image/jpeg", data: base64Data } });
+        });
+    }
+
     const prompt = `
       Solve this university math problem step-by-step.
-      Problem: "${problemText}"
+      ${images && images.length > 0 ? "I have uploaded photos of the problem." : `Problem text: "${problemText}"`}
       
+      First, if images are provided, Transcribe the problem text exactly into LaTeX format.
+      Then, provide the solution.
+
       IMPORTANT: 
       1. Use '$' for inline math and '$$' for block math.
       2. Do NOT use markdown code blocks for math.
       
-      Identify the specific theorems/definitions used in 'knowledge_tags'.
-      Provide a short 'problem_summary'.
+      Return JSON:
+      - 'problem_summary': Short title.
+      - 'problem_transcription': The transcribed text of the problem (if images used).
+      - 'steps': Solution steps.
+      - 'knowledge_tags': Theorems/Definitions used.
     `;
+
+    parts.push({ text: prompt });
 
     const response = await ai.models.generateContent({
       model: MODEL_FAST,
-      contents: prompt,
+      contents: { parts: parts },
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             problem_summary: { type: Type.STRING },
+            problem_transcription: { type: Type.STRING }, // Returned if image was used
             steps: {
               type: Type.ARRAY,
               items: {
@@ -242,10 +262,14 @@ export const solveUserProblem = async (problemText: string): Promise<{ steps: Pr
       explanation: s.explanation
     }));
 
+    // If images were used, we might want to prepend the transcription to the explanation or problem text context in the main view
+    // For now, we return it so the UI can display it.
+
     return {
       steps: steps,
       knowledgePoints: json.knowledge_tags || [],
-      summary: json.problem_summary || "Solved Problem"
+      summary: json.problem_summary || "Solved Problem",
+      problem_transcription: json.problem_transcription
     };
   } catch (error) {
     console.error("Error solving problem:", error);

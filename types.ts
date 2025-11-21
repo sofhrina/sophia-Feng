@@ -70,6 +70,7 @@ export interface ProblemItem {
   chapterId: string;
   source: 'user' | 'ai';
   content: string;
+  originalImages: string[] | null; // Changed to array for multiple images
   summary: string | null; // Short 1-sentence description for history
   steps: ProblemStep[];
   userAnswer: string | null; // Added: User's own answer

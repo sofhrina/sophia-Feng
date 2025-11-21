@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+
+import React, { useState, useRef } from 'react';
 import { ProblemItem, ProblemStep, DefinitionItem, TheoremItem, MasteryLevel } from '../types';
 import { generateAiProblem, solveUserProblem, generateMissingConcept } from '../services/geminiService';
 import { MarkdownDisplay } from '../components/MarkdownDisplay';
-import { Brain, Target, Play, CheckCircle, HelpCircle, Layers, Loader2, History, XCircle, Zap, ArrowRight, Star, Edit3, Save, BookOpen } from 'lucide-react';
+import { Brain, Target, Play, CheckCircle, HelpCircle, Layers, Loader2, History, XCircle, Zap, ArrowRight, Star, Edit3, Save, BookOpen, Image, Trash2, Upload } from 'lucide-react';
 
 interface ExercisesViewProps {
   items: ProblemItem[];
@@ -19,7 +20,12 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
   const [subject, setSubject] = useState('Analysis');
   const [chapter, setChapter] = useState('Sequences');
   const [specificTopic, setSpecificTopic] = useState('');
+  
+  // User Input State
   const [userProblemText, setUserProblemText] = useState('');
+  const [userImages, setUserImages] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [currentUserAnswer, setCurrentUserAnswer] = useState('');
   
   const [currentProblemId, setCurrentProblemId] = useState<string | null>(null);
@@ -27,6 +33,23 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
   const [learningConcept, setLearningConcept] = useState<string | null>(null);
   const [visibleStepIndex, setVisibleStepIndex] = useState(-1);
   
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setUserImages(prev => [...prev, reader.result as string]);
+        };
+        reader.readAsDataURL(file as Blob);
+    });
+  };
+
+  const removeImage = (index: number) => {
+      setUserImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleGenerate = async () => {
     setIsLoading(true);
     setCurrentProblemId(null);
@@ -42,6 +65,7 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
         chapterId: chapter,
         source: 'ai',
         content: result.content,
+        originalImages: null,
         summary: result.summary,
         steps: result.steps,
         knowledgePoints: result.knowledgePoints,
@@ -61,20 +85,21 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
   };
 
   const handleSolveUser = async () => {
-    if (!userProblemText) return;
+    if (!userProblemText && userImages.length === 0) return;
     setIsLoading(true);
     setCurrentProblemId(null);
     setVisibleStepIndex(-1);
     
     try {
-      const result = await solveUserProblem(userProblemText);
+      const result = await solveUserProblem(userProblemText, userImages.length > 0 ? userImages : undefined);
       const newProblem: ProblemItem = {
         id: Date.now().toString(),
         createdAt: Date.now(),
         subjectId: subject,
         chapterId: chapter,
         source: 'user',
-        content: userProblemText,
+        content: result.problem_transcription || userProblemText || "Problem from Image", // Use transcription if available
+        originalImages: userImages.length > 0 ? [...userImages] : null,
         summary: result.summary,
         steps: result.steps,
         knowledgePoints: result.knowledgePoints,
@@ -86,6 +111,9 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
       };
       onAddItem(newProblem);
       setCurrentProblemId(newProblem.id);
+      // Reset input
+      setUserProblemText('');
+      setUserImages([]);
     } catch (error) {
         console.error(error);
     } finally {
@@ -161,30 +189,60 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
                 </div>
            </div>
            
-           <div className="flex gap-2 items-center">
-              <div className="flex bg-mist-100 rounded-lg p-1 mr-2 border border-mist-200">
-                  <button onClick={() => setMode('ai')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'ai' ? 'bg-white text-paris-500 shadow-sm' : 'text-paris-600 hover:text-paris-800'}`}>Generate Question</button>
-                  <button onClick={() => setMode('user')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'user' ? 'bg-white text-paris-500 shadow-sm' : 'text-paris-600 hover:text-paris-800'}`}>Solve Mine</button>
-              </div>
+           <div className="flex flex-col gap-3">
+               <div className="flex items-center justify-between">
+                    <div className="flex bg-mist-100 rounded-lg p-1 mr-2 border border-mist-200">
+                        <button onClick={() => setMode('ai')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'ai' ? 'bg-white text-paris-500 shadow-sm' : 'text-paris-600 hover:text-paris-800'}`}>Generate Question</button>
+                        <button onClick={() => setMode('user')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'user' ? 'bg-white text-paris-500 shadow-sm' : 'text-paris-600 hover:text-paris-800'}`}>Solve Mine</button>
+                    </div>
+
+                     <button 
+                        onClick={mode === 'ai' ? handleGenerate : handleSolveUser}
+                        disabled={isLoading}
+                        className="bg-paris-300 hover:bg-paris-400 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 shadow-md ml-auto"
+                    >
+                        {isLoading ? <Loader2 className="animate-spin w-4 h-4" /> : <Play className="fill-current w-4 h-4" />}
+                        {mode === 'ai' ? 'Generate Challenge' : 'Solve Photos'}
+                    </button>
+               </div>
 
               {mode === 'user' && (
-                <input
-                   type="text"
-                   value={userProblemText}
-                   onChange={(e) => setUserProblemText(e.target.value)}
-                   placeholder="Paste problem here (LaTeX supported)..."
-                   className="flex-1 bg-white border border-mist-300 rounded-lg px-4 py-2 text-paris-800 focus:border-paris-300 outline-none"
-                />
+                <div className="flex flex-col gap-2 animate-fadeIn">
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={userProblemText}
+                            onChange={(e) => setUserProblemText(e.target.value)}
+                            placeholder="Paste problem text (Optional if uploading photos)..."
+                            className="flex-1 bg-white border border-mist-300 rounded-lg px-4 py-2 text-paris-800 focus:border-paris-300 outline-none"
+                        />
+                        <button 
+                            onClick={() => fileInputRef.current?.click()} 
+                            className="bg-white border border-mist-300 text-paris-600 px-4 py-2 rounded-lg hover:bg-mist-50 flex items-center gap-2"
+                        >
+                            <Upload className="w-4 h-4" /> Photos ({userImages.length})
+                        </button>
+                        <input type="file" multiple accept="image/*" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+                    </div>
+                    
+                    {/* Image Preview Grid */}
+                    {userImages.length > 0 && (
+                        <div className="flex gap-2 overflow-x-auto pb-2">
+                            {userImages.map((img, idx) => (
+                                <div key={idx} className="relative group shrink-0">
+                                    <img src={img} className="h-20 w-20 object-cover rounded-lg border border-mist-200" />
+                                    <button 
+                                        onClick={() => removeImage(idx)}
+                                        className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        <XCircle className="w-3 h-3" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
               )}
-              
-              <button 
-                onClick={mode === 'ai' ? handleGenerate : handleSolveUser}
-                disabled={isLoading}
-                className="bg-paris-300 hover:bg-paris-400 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 shadow-md ml-auto"
-              >
-                {isLoading ? <Loader2 className="animate-spin w-4 h-4" /> : <Play className="fill-current w-4 h-4" />}
-                {mode === 'ai' ? 'Generate Challenge' : 'Solve'}
-              </button>
            </div>
         </div>
 
@@ -212,6 +270,16 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
                          ))}
                      </div>
                  </div>
+                 
+                 {/* Render Original Images if Present */}
+                 {currentProblem.originalImages && currentProblem.originalImages.length > 0 && (
+                     <div className="flex gap-4 overflow-x-auto pb-4 mb-4 border-b border-mist-100">
+                         {currentProblem.originalImages.map((img, i) => (
+                             <img key={i} src={img} alt={`Problem Part ${i+1}`} className="h-64 rounded-lg border border-mist-200 shadow-sm" />
+                         ))}
+                     </div>
+                 )}
+
                  <div className="text-lg text-paris-900 leading-relaxed font-serif">
                     <MarkdownDisplay content={currentProblem.content} />
                  </div>
@@ -301,7 +369,7 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
             !isLoading && (
               <div className="h-full flex flex-col items-center justify-center text-mist-400">
                  <BookOpen className="w-20 h-20 mb-6 opacity-30" />
-                 <p className="text-lg font-medium">Configure the generator to begin practice</p>
+                 <p className="text-lg font-medium">Configure the generator or upload photos to begin</p>
               </div>
             )
           )}
@@ -338,6 +406,11 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
                         <div className="text-paris-700 font-medium mb-1">
                             {p.summary || "Math Problem"}
                         </div>
+                        {p.originalImages && p.originalImages.length > 0 && (
+                            <div className="mt-1 flex items-center gap-1 text-paris-400">
+                                <Image className="w-3 h-3" /> <span className="text-[10px]">{p.originalImages.length} photo(s)</span>
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
