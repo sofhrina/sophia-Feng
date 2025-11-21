@@ -1,9 +1,8 @@
-
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ProblemItem, ProblemStep, DefinitionItem, TheoremItem, MasteryLevel } from '../types';
 import { generateAiProblem, solveUserProblem, generateMissingConcept } from '../services/geminiService';
 import { MarkdownDisplay } from '../components/MarkdownDisplay';
-import { Brain, Target, Play, CheckCircle, HelpCircle, Layers, Loader2, History, XCircle, Zap, ArrowRight, Star, Edit3, Save, BookOpen, Image, Trash2, Upload } from 'lucide-react';
+import { Brain, Target, Play, CheckCircle, HelpCircle, Layers, Loader2, History, XCircle, Zap, ArrowRight, Star, Edit3, Save, BookOpen, Image, Trash2, Upload, AlertTriangle, ChevronDown } from 'lucide-react';
 
 interface ExercisesViewProps {
   items: ProblemItem[];
@@ -13,51 +12,94 @@ interface ExercisesViewProps {
   onUpdateItem: (id: string, updates: Partial<ProblemItem>) => void;
   onAddDefinition: (item: DefinitionItem) => void;
   onEditDefinition: (item: DefinitionItem) => void;
+  initialActiveId?: string | null;
 }
 
-export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions, theorems, onAddItem, onUpdateItem, onAddDefinition, onEditDefinition }) => {
+export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions, theorems, onAddItem, onUpdateItem, onAddDefinition, onEditDefinition, initialActiveId }) => {
   const [mode, setMode] = useState<'ai' | 'user'>('ai');
   const [subject, setSubject] = useState('Analysis');
   const [chapter, setChapter] = useState('Sequences');
   const [specificTopic, setSpecificTopic] = useState('');
+  const [difficulty, setDifficulty] = useState('UCL 2:1'); // Default Medium
   
   // User Input State
   const [userProblemText, setUserProblemText] = useState('');
   const [userImages, setUserImages] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // User Solution State
   const [currentUserAnswer, setCurrentUserAnswer] = useState('');
+  const [userSolutionImages, setUserSolutionImages] = useState<string[]>([]);
+  const solutionInputRef = useRef<HTMLInputElement>(null);
   
+  // Struggle State
+  const [showStruggleForm, setShowStruggleForm] = useState(false);
+  const [struggleNote, setStruggleNote] = useState('');
+  const [struggleImages, setStruggleImages] = useState<string[]>([]);
+  const struggleInputRef = useRef<HTMLInputElement>(null);
+
   const [currentProblemId, setCurrentProblemId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [learningConcept, setLearningConcept] = useState<string | null>(null);
   const [visibleStepIndex, setVisibleStepIndex] = useState(-1);
   
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Deep Link
+  useEffect(() => {
+      if (initialActiveId) {
+          const prob = items.find(p => p.id === initialActiveId);
+          if (prob) {
+              setCurrentProblemId(initialActiveId);
+              setVisibleStepIndex(prob.steps.length); // Show full solution
+              setCurrentUserAnswer(prob.userAnswer || '');
+              setUserSolutionImages(prob.solutionImages || []);
+          }
+      }
+  }, [initialActiveId, items]);
+
+  // --- File Handlers ---
+
+  const handleProblemFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-
     Array.from(files).forEach(file => {
         const reader = new FileReader();
-        reader.onloadend = () => {
-            setUserImages(prev => [...prev, reader.result as string]);
-        };
+        reader.onloadend = () => setUserImages(prev => [...prev, reader.result as string]);
         reader.readAsDataURL(file as Blob);
     });
   };
 
-  const removeImage = (index: number) => {
-      setUserImages(prev => prev.filter((_, i) => i !== index));
+  const handleSolutionFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => setUserSolutionImages(prev => [...prev, reader.result as string]);
+        reader.readAsDataURL(file as Blob);
+    });
   };
+
+  const handleStruggleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => setStruggleImages(prev => [...prev, reader.result as string]);
+        reader.readAsDataURL(file as Blob);
+    });
+  };
+
+  // --- Logic ---
 
   const handleGenerate = async () => {
     setIsLoading(true);
     setCurrentProblemId(null);
     setVisibleStepIndex(-1);
     setCurrentUserAnswer('');
+    setUserSolutionImages([]);
+    resetStruggleForm();
 
     try {
-      const result = await generateAiProblem(subject, chapter, specificTopic);
+      const result = await generateAiProblem(subject, chapter, difficulty, specificTopic);
       const newProblem: ProblemItem = {
         id: Date.now().toString(),
         createdAt: Date.now(),
@@ -71,6 +113,9 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
         knowledgePoints: result.knowledgePoints,
         uclDifficulty: result.difficulty,
         userAnswer: null,
+        solutionImages: null,
+        struggleNote: null,
+        struggleImages: null,
         isSolved: false,
         isWrong: false,
         mastery: 1
@@ -89,6 +134,7 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
     setIsLoading(true);
     setCurrentProblemId(null);
     setVisibleStepIndex(-1);
+    resetStruggleForm();
     
     try {
       const result = await solveUserProblem(userProblemText, userImages.length > 0 ? userImages : undefined);
@@ -98,13 +144,16 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
         subjectId: subject,
         chapterId: chapter,
         source: 'user',
-        content: result.problem_transcription || userProblemText || "Problem from Image", // Use transcription if available
+        content: result.problem_transcription || userProblemText || "Problem from Image",
         originalImages: userImages.length > 0 ? [...userImages] : null,
         summary: result.summary,
         steps: result.steps,
         knowledgePoints: result.knowledgePoints,
         uclDifficulty: 'Self-Assigned',
         userAnswer: currentUserAnswer, 
+        solutionImages: userSolutionImages.length > 0 ? [...userSolutionImages] : null,
+        struggleNote: null,
+        struggleImages: null,
         isSolved: false,
         isWrong: false,
         mastery: 1
@@ -159,8 +208,28 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
 
   const saveUserAnswer = () => {
       if (currentProblemId) {
-          onUpdateItem(currentProblemId, { userAnswer: currentUserAnswer });
+          onUpdateItem(currentProblemId, { 
+              userAnswer: currentUserAnswer,
+              solutionImages: userSolutionImages
+          });
       }
+  };
+
+  const submitStruggle = () => {
+      if (currentProblemId) {
+          onUpdateItem(currentProblemId, {
+              isWrong: true,
+              struggleNote: struggleNote,
+              struggleImages: struggleImages
+          });
+          setShowStruggleForm(false);
+      }
+  };
+
+  const resetStruggleForm = () => {
+      setShowStruggleForm(false);
+      setStruggleNote('');
+      setStruggleImages([]);
   };
 
   const currentProblem = items.find(i => i.id === currentProblemId);
@@ -180,11 +249,26 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
         {/* Controls */}
         <div className="bg-white p-6 border-b border-mist-200 flex flex-col gap-4 shadow-sm z-10">
            <div className="flex gap-4 items-center">
-                <div className="flex-1 grid grid-cols-3 gap-2">
+                <div className="flex-1 grid grid-cols-4 gap-2">
                     <input value={subject} onChange={e => setSubject(e.target.value)} className="bg-mist-50 border border-mist-200 rounded px-3 py-2 text-paris-700 text-sm focus:ring-1 focus:ring-paris-300 outline-none" placeholder="Subject" />
                     <input value={chapter} onChange={e => setChapter(e.target.value)} className="bg-mist-50 border border-mist-200 rounded px-3 py-2 text-paris-700 text-sm focus:ring-1 focus:ring-paris-300 outline-none" placeholder="Chapter" />
+                    
                     {mode === 'ai' && (
-                        <input value={specificTopic} onChange={e => setSpecificTopic(e.target.value)} className="bg-mist-50 border border-mist-200 rounded px-3 py-2 text-paris-700 text-sm focus:ring-1 focus:ring-paris-300 outline-none" placeholder="Target Topic (e.g. Taylor Series)" />
+                        <>
+                            <div className="relative">
+                                <select 
+                                    value={difficulty} 
+                                    onChange={e => setDifficulty(e.target.value)}
+                                    className="w-full appearance-none bg-mist-50 border border-mist-200 rounded px-3 py-2 text-paris-700 text-sm focus:ring-1 focus:ring-paris-300 outline-none"
+                                >
+                                    <option value="UCL Pass">UCL Pass (Easy)</option>
+                                    <option value="UCL 2:1">UCL 2:1 (Medium)</option>
+                                    <option value="UCL First Class">UCL First Class (Hard)</option>
+                                </select>
+                                <ChevronDown className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-paris-400 pointer-events-none" />
+                            </div>
+                            <input value={specificTopic} onChange={e => setSpecificTopic(e.target.value)} className="bg-mist-50 border border-mist-200 rounded px-3 py-2 text-paris-700 text-sm focus:ring-1 focus:ring-paris-300 outline-none" placeholder="Target Topic (e.g. Taylor Series)" />
+                        </>
                     )}
                 </div>
            </div>
@@ -222,7 +306,7 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
                         >
                             <Upload className="w-4 h-4" /> Photos ({userImages.length})
                         </button>
-                        <input type="file" multiple accept="image/*" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+                        <input type="file" multiple accept="image/*" ref={fileInputRef} className="hidden" onChange={handleProblemFileChange} />
                     </div>
                     
                     {/* Image Preview Grid */}
@@ -232,7 +316,7 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
                                 <div key={idx} className="relative group shrink-0">
                                     <img src={img} className="h-20 w-20 object-cover rounded-lg border border-mist-200" />
                                     <button 
-                                        onClick={() => removeImage(idx)}
+                                        onClick={() => setUserImages(prev => prev.filter((_, i) => i !== idx))}
                                         className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
                                     >
                                         <XCircle className="w-3 h-3" />
@@ -289,21 +373,48 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
               <div className="bg-peach-100/30 rounded-xl border border-peach-200 p-6 mb-8">
                   <div className="flex justify-between items-center mb-4">
                       <h3 className="font-bold text-peach-600 text-sm flex items-center gap-2 uppercase tracking-wider">
-                          <Edit3 className="w-4 h-4" /> My Steps & Solution (Markdown)
+                          <Edit3 className="w-4 h-4" /> My Steps & Solution
                       </h3>
-                      <button 
-                        onClick={saveUserAnswer}
-                        className="text-xs bg-paris-300 text-white px-3 py-1.5 rounded-full hover:bg-paris-400 font-bold flex items-center gap-1 shadow-sm transition-all"
-                      >
-                          <Save className="w-3 h-3" /> Save Work
-                      </button>
+                      <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => solutionInputRef.current?.click()}
+                            className="text-xs bg-white border border-peach-300 text-peach-600 px-3 py-1.5 rounded-full hover:bg-peach-50 font-bold flex items-center gap-1"
+                          >
+                              <Image className="w-3 h-3" /> Add Photos
+                          </button>
+                          <input type="file" multiple accept="image/*" ref={solutionInputRef} className="hidden" onChange={handleSolutionFileChange} />
+
+                          <button 
+                            onClick={saveUserAnswer}
+                            className="text-xs bg-paris-300 text-white px-3 py-1.5 rounded-full hover:bg-paris-400 font-bold flex items-center gap-1 shadow-sm transition-all"
+                          >
+                              <Save className="w-3 h-3" /> Save Work
+                          </button>
+                      </div>
                   </div>
                   <textarea 
                     value={currentUserAnswer || currentProblem.userAnswer || ''}
                     onChange={(e) => setCurrentUserAnswer(e.target.value)}
                     placeholder="Type your step-by-step solution here... (Supports LaTeX $$ and Markdown)"
-                    className="w-full bg-white border border-mist-200 rounded-lg p-4 text-paris-800 focus:ring-2 focus:ring-paris-200 outline-none min-h-[200px] font-mono text-sm leading-relaxed"
+                    className="w-full bg-white border border-mist-200 rounded-lg p-4 text-paris-800 focus:ring-2 focus:ring-paris-200 outline-none min-h-[200px] font-mono text-sm leading-relaxed mb-4"
                   />
+                  
+                  {/* User Solution Images */}
+                  {(userSolutionImages.length > 0 || (currentProblem.solutionImages && currentProblem.solutionImages.length > 0)) && (
+                      <div className="flex gap-2 overflow-x-auto">
+                          {(userSolutionImages.length > 0 ? userSolutionImages : currentProblem.solutionImages)?.map((img, i) => (
+                               <div key={i} className="relative group">
+                                   <img src={img} className="h-32 rounded-lg border border-mist-200 shadow-sm" />
+                                   <button 
+                                        onClick={() => setUserSolutionImages(prev => prev.filter((_, idx) => idx !== i))}
+                                        className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                                   >
+                                       <Trash2 className="w-3 h-3" />
+                                   </button>
+                               </div>
+                          ))}
+                      </div>
+                  )}
               </div>
 
               {/* Solution Steps */}
@@ -339,8 +450,9 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
                  ))}
               </div>
               
-              <div className="flex justify-center mt-10 gap-4">
-                  {visibleStepIndex < currentProblem.steps.length - 1 ? (
+              {/* Action Buttons / Struggle Form */}
+              <div className="flex flex-col items-center mt-10 gap-6">
+                  {visibleStepIndex < currentProblem.steps.length - 1 && (
                      <button 
                         onClick={showNextStep}
                         className="bg-paris-800 hover:bg-paris-700 text-white px-8 py-3 rounded-full font-medium flex items-center gap-2 transition-all hover:shadow-lg"
@@ -348,18 +460,68 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
                         <HelpCircle className="w-5 h-5 text-paris-300" />
                         Show Step {visibleStepIndex + 2}
                      </button>
-                  ) : (
-                     <div className="flex gap-4">
-                         {!currentProblem.isWrong && (
-                            <button onClick={() => onUpdateItem(currentProblem.id, { isWrong: true })} className="bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 px-6 py-3 rounded-xl font-bold transition-colors flex items-center gap-2">
-                                <XCircle className="w-5 h-5" />
-                                I struggled with this
-                            </button>
+                  )}
+
+                  {(visibleStepIndex === currentProblem.steps.length - 1) && (
+                     <div className="w-full">
+                         {!showStruggleForm && !currentProblem.isWrong && (
+                             <div className="flex justify-center gap-4">
+                                <button 
+                                    onClick={() => setShowStruggleForm(true)} 
+                                    className="bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 px-6 py-3 rounded-xl font-bold transition-colors flex items-center gap-2"
+                                >
+                                    <AlertTriangle className="w-5 h-5" />
+                                    I struggled with this
+                                </button>
+                                <div className="bg-paris-100 text-paris-600 border border-paris-200 px-8 py-3 rounded-xl flex items-center gap-3 shadow-sm">
+                                    <CheckCircle className="w-6 h-6" />
+                                    <span className="font-bold text-lg">Problem Completed</span>
+                                </div>
+                            </div>
                          )}
-                         <div className="bg-paris-100 text-paris-600 border border-paris-200 px-8 py-3 rounded-xl flex items-center gap-3 shadow-sm">
-                            <CheckCircle className="w-6 h-6" />
-                            <span className="font-bold text-lg">Problem Completed</span>
-                        </div>
+
+                         {(showStruggleForm || (currentProblem.isWrong && currentProblem.struggleNote)) && (
+                             <div className="mt-6 bg-rose-50 border border-rose-200 rounded-xl p-6 animate-fadeIn">
+                                 <h4 className="font-bold text-rose-700 mb-4 flex items-center gap-2">
+                                     <AlertTriangle className="w-5 h-5" /> Struggle Analysis
+                                 </h4>
+                                 
+                                 {showStruggleForm ? (
+                                    <>
+                                        <textarea 
+                                            value={struggleNote}
+                                            onChange={e => setStruggleNote(e.target.value)}
+                                            placeholder="Why did you struggle? (e.g. forgot the chain rule...)"
+                                            className="w-full bg-white border border-rose-200 rounded-lg p-3 text-sm mb-4 outline-none focus:ring-2 focus:ring-rose-200"
+                                        />
+                                        <div className="flex justify-between items-center">
+                                            <div className="flex items-center gap-2">
+                                                <button onClick={() => struggleInputRef.current?.click()} className="text-xs bg-white text-rose-600 border border-rose-200 px-3 py-1.5 rounded-full font-bold hover:bg-rose-50">
+                                                    Upload Stuck Point
+                                                </button>
+                                                <input type="file" ref={struggleInputRef} className="hidden" accept="image/*" onChange={handleStruggleFileChange} />
+                                                <span className="text-xs text-rose-400">{struggleImages.length} images</span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={resetStruggleForm} className="text-xs text-paris-500 hover:text-paris-700 font-bold px-3">Cancel</button>
+                                                <button onClick={submitStruggle} className="text-xs bg-rose-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-rose-600 shadow-sm">Save & Review Later</button>
+                                            </div>
+                                        </div>
+                                    </>
+                                 ) : (
+                                     <div>
+                                         <p className="text-rose-800 text-sm mb-2 font-medium">"{currentProblem.struggleNote}"</p>
+                                         {currentProblem.struggleImages && (
+                                             <div className="flex gap-2 overflow-x-auto mt-2">
+                                                 {currentProblem.struggleImages.map((img, i) => (
+                                                     <img key={i} src={img} className="h-20 rounded border border-rose-200" />
+                                                 ))}
+                                             </div>
+                                         )}
+                                     </div>
+                                 )}
+                             </div>
+                         )}
                      </div>
                   )}
               </div>
@@ -394,6 +556,7 @@ export const ExercisesView: React.FC<ExercisesViewProps> = ({ items, definitions
                             setCurrentProblemId(p.id); 
                             setVisibleStepIndex(p.steps.length);
                             setCurrentUserAnswer(p.userAnswer || '');
+                            setUserSolutionImages(p.solutionImages || []);
                         }}
                         className={`p-3 rounded-lg cursor-pointer border text-xs transition-colors ${
                             currentProblemId === p.id ? 'bg-peach-100 border-peach-400' : 'bg-white border-mist-200 hover:bg-mist-50'

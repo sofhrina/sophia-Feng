@@ -10,69 +10,64 @@ export const MarkdownDisplay: React.FC<MarkdownDisplayProps> = ({ content, class
 
   useEffect(() => {
     if (containerRef.current && (window as any).MathJax) {
-      // Clear previous content render queue if needed
-      // Trigger typeset
       const mathJax = (window as any).MathJax;
+      // Reset and typeset
       if (mathJax.typesetPromise) {
         mathJax.typesetPromise([containerRef.current]).catch((err: any) => {
-           // console.warn('MathJax typeset failed', err);
+           console.warn('MathJax typeset failed', err);
         });
       }
     }
   }, [content]);
 
-  // Pre-process content to fix common AI math formatting issues
-  const prepareContent = (text: string) => {
+  // Safe Processing Pipeline:
+  // 1. Strip code blocks
+  // 2. Mask Math ($...$) with SAFE TOKENS (no underscores/asterisks)
+  // 3. Parse Markdown
+  // 4. Unmask Math
+  const processContent = (text: string) => {
     if (!text) return "";
     
-    // 1. Remove markdown code blocks wrapping math (e.g. ```latex ... ```)
-    // We replace them with just the content inside, ensuring `$$` delimiters are present if it looks like a block
-    let cleaned = text.replace(/```latex\s*([\s\S]*?)\s*```/gi, '$$$1$$');
-    cleaned = cleaned.replace(/```\s*([\s\S]*?)\s*```/gi, (match, p1) => {
-        // If the content inside backticks contains backslashes or equals, assume it's math
-        if (p1.includes('\\') || p1.includes('=')) {
-            return `$$${p1}$$`;
-        }
-        // Otherwise keep as code
-        return match;
+    // 1. Clean code blocks (remove ```latex ... ``` wrappers)
+    let clean = text
+        .replace(/```(?:latex|markdown|math|json)?\n?([\s\S]*?)\n?```/gi, '$1')
+        .replace(/`(\$\$[\s\S]*?\$\$)`/gi, '$1')
+        .replace(/`(\$[\s\S]*?\$)`/gi, '$1');
+
+    const mathBlocks: string[] = [];
+    
+    // 2. Mask Math
+    // We use alphanumeric tokens like 'MATHBLOCK0END' to ensure 'marked' 
+    // does not interpret them as formatting (bold/italic).
+    
+    // Mask Block Math $$...$$
+    clean = clean.replace(/\$\$([\s\S]*?)\$\$/g, (match) => {
+        mathBlocks.push(match);
+        return `MATHBLOCK${mathBlocks.length - 1}END`;
+    });
+    
+    // Mask Inline Math $...$
+    clean = clean.replace(/\$([\s\S]*?)\$/g, (match) => {
+        mathBlocks.push(match);
+        return `MATHINLINE${mathBlocks.length - 1}END`;
     });
 
-    // 2. Ensure display math \[ \] becomes $$ $$ for consistency
-    cleaned = cleaned.replace(/\\\[/g, '$$').replace(/\\\]/g, '$$');
-    
-    // 3. Ensure inline math \( \) becomes $ $
-    cleaned = cleaned.replace(/\\\(/g, '$').replace(/\\\)/g, '$');
+    // 3. Parse Markdown (Convert **bold**, ## Headers, etc to HTML)
+    let html = (window as any).marked ? (window as any).marked.parse(clean) : clean;
 
-    return cleaned;
-  };
+    // 4. Unmask Math
+    // Replace the safe tokens back with the original LaTeX strings
+    html = html.replace(/MATHBLOCK(\d+)END/g, (_, index) => mathBlocks[parseInt(index)]);
+    html = html.replace(/MATHINLINE(\d+)END/g, (_, index) => mathBlocks[parseInt(index)]);
 
-  const formatText = (text: string) => {
-    const prepared = prepareContent(text);
-    
-    let formatted = prepared
-      // Headers
-      .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold text-paris-500 mt-4 mb-2 font-serif">$1</h3>') // Royal Blue H3
-      .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold text-paris-700 mt-5 mb-3 border-b border-mist-200 pb-1 font-serif">$1</h2>') // Navy H2
-      .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold text-paris-900 mt-6 mb-4 font-serif">$1</h1>') // Dark Navy H1
-      // Bold
-      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-paris-900 font-bold">$1</strong>')
-      // Italics
-      .replace(/\*(.*?)\*/g, '<em class="text-paris-600 italic">$1</em>')
-      // Lists
-      .replace(/^\- (.*$)/gim, '<li class="ml-4 list-disc text-paris-800 mb-1">$1</li>')
-      // Blockquotes / Callouts -> Cyan background
-      .replace(/^> (.*$)/gim, '<blockquote class="border-l-4 border-peach-400 bg-peach-100 p-3 italic text-paris-800 my-2 rounded-r shadow-sm">$1</blockquote>')
-      // Newlines
-      .replace(/\n/g, '<br />');
-      
-    return { __html: formatted };
+    return html;
   };
 
   return (
     <div 
-      ref={containerRef}
-      className={`prose prose-slate max-w-none leading-relaxed text-paris-800 ${className}`}
-      dangerouslySetInnerHTML={formatText(content)}
+      ref={containerRef} 
+      className={`prose prose-slate max-w-none prose-p:leading-relaxed prose-headings:font-serif prose-headings:font-bold prose-a:text-paris-500 ${className}`}
+      dangerouslySetInnerHTML={{ __html: processContent(content) }}
     />
   );
 };

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Section, DefinitionItem, TheoremItem, ProblemItem, ChapterSummaryItem } from './types';
 import { Sidebar } from './components/Sidebar';
@@ -14,7 +13,7 @@ import { X, Globe, BookMarked } from 'lucide-react';
 const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState<Section>(Section.DEFINITIONS);
   
-  // Centralized State (In a real app, use Context or Redux)
+  // Centralized State
   const [definitions, setDefinitions] = useState<DefinitionItem[]>([]);
   const [theorems, setTheorems] = useState<TheoremItem[]>([]);
   const [problems, setProblems] = useState<ProblemItem[]>([]);
@@ -79,7 +78,8 @@ const App: React.FC = () => {
                   onAddItem={addProblem} 
                   onUpdateItem={updateProblem} 
                   onAddDefinition={addDefinition}
-                  onEditDefinition={setEditingDef} 
+                  onEditDefinition={setEditingDef}
+                  initialActiveId={targetItemId}
                />;
       case Section.CHAPTER_SUMMARY:
         return <ChapterSummaryView definitions={definitions} theorems={theorems} summaries={summaries} onAddSummary={addSummary} />;

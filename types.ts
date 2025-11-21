@@ -73,7 +73,15 @@ export interface ProblemItem {
   originalImages: string[] | null; // Changed to array for multiple images
   summary: string | null; // Short 1-sentence description for history
   steps: ProblemStep[];
-  userAnswer: string | null; // Added: User's own answer
+  
+  // User Solution Data
+  userAnswer: string | null; // Markdown Text
+  solutionImages: string[] | null; // Added: User's own solution photos
+  
+  // Struggle Data
+  struggleNote: string | null; // Added: Why did I struggle?
+  struggleImages: string[] | null; // Added: Photos of where I got stuck
+
   knowledgePoints: string[];
   uclDifficulty: string;
   isSolved: boolean;

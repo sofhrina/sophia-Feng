@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DefinitionItem, TheoremItem, ProblemItem, Section } from '../types';
-import { AlertTriangle, Repeat, Layers, BookOpen, Scale, Calendar, ArrowUpRight } from 'lucide-react';
+import { AlertTriangle, Repeat, Layers, BookOpen, Scale, Calendar, ArrowUpRight, ArrowRight } from 'lucide-react';
 import { MarkdownDisplay } from '../components/MarkdownDisplay';
 
 interface ReviewViewProps {
@@ -187,10 +187,18 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ definitions, theorems, p
                                 <div className="mb-4 text-paris-700 text-sm border-b border-mist-100 pb-4">
                                     <MarkdownDisplay content={prob.content} />
                                 </div>
-                                <div className="flex gap-2">
-                                    {prob.knowledgePoints.map((kp, i) => (
-                                        <span key={i} className="bg-mist-100 text-paris-500 text-[10px] px-2 py-1 rounded-full">{kp}</span>
-                                    ))}
+                                <div className="flex justify-between items-end">
+                                     <div className="flex gap-2">
+                                        {prob.knowledgePoints.map((kp, i) => (
+                                            <span key={i} className="bg-mist-100 text-paris-500 text-[10px] px-2 py-1 rounded-full">{kp}</span>
+                                        ))}
+                                    </div>
+                                    <button 
+                                        onClick={() => onNavigateToItem(Section.EXERCISES, prob.id)}
+                                        className="text-xs bg-paris-300 text-white px-4 py-2 rounded-lg font-bold hover:bg-paris-400 transition-colors flex items-center gap-2"
+                                    >
+                                        Retake Problem <ArrowRight className="w-3 h-3" />
+                                    </button>
                                 </div>
                             </div>
                         </div>
